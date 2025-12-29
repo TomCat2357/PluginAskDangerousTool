@@ -23,13 +23,39 @@ Copy the plugin to your project's `.claude-plugin/` directory.
 
 ## Configuration
 
-1. Copy `example.local.md` to `.claude/ask-dangerous-tool.local.md` in your project:
+### Settings File Locations and Priority
 
+This plugin loads settings from `.claude/ask-dangerous-tool.local.md` with the following priority:
+
+1. **Project scope** (highest priority): `<projectroot>/.claude/ask-dangerous-tool.local.md`
+2. **User scope** (fallback): `~/.claude/ask-dangerous-tool.local.md`
+3. **Defaults**: Empty allow lists (if no settings file exists)
+
+If a project-scope settings file exists, the user-scope file is **not loaded**. This allows you to:
+- Set global defaults in `~/.claude/ask-dangerous-tool.local.md`
+- Override settings per-project in `<projectroot>/.claude/ask-dangerous-tool.local.md`
+
+### Initial Setup
+
+**Option 1: User scope (global settings)**
 ```bash
+mkdir -p ~/.claude
+cp /path/to/plugin/example.local.md ~/.claude/ask-dangerous-tool.local.md
+```
+
+**Option 2: Project scope (project-specific settings)**
+```bash
+mkdir -p .claude
 cp /path/to/plugin/example.local.md .claude/ask-dangerous-tool.local.md
 ```
 
-2. Edit the allow lists as needed:
+**Option 3: Use the built-in command**
+```
+/ask-dangerous-tool:edit-allowlist init
+```
+This will prompt you to choose user or project scope.
+
+### Settings Format
 
 ```yaml
 ---

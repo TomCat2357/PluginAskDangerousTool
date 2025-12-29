@@ -1,17 +1,35 @@
 #!/usr/bin/env node
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 
 /**
  * Read settings from .claude/ask-dangerous-tool.local.md
+ * Priority: project scope > user scope > defaults
  * Format: YAML frontmatter with write_allow_outside_project paths
  */
 function loadSettings(projectRoot) {
-  const settingsPath = path.join(projectRoot, ".claude", "ask-dangerous-tool.local.md");
   const defaults = {
     write_allow_outside_project: []
   };
 
+  // Try project scope first
+  const projectPath = path.join(projectRoot, ".claude", "ask-dangerous-tool.local.md");
+  if (fs.existsSync(projectPath)) {
+    return parseSettings(projectPath, defaults);
+  }
+
+  // Fall back to user scope
+  const userPath = path.join(os.homedir(), ".claude", "ask-dangerous-tool.local.md");
+  if (fs.existsSync(userPath)) {
+    return parseSettings(userPath, defaults);
+  }
+
+  // No settings found, return defaults
+  return defaults;
+}
+
+function parseSettings(settingsPath, defaults) {
   try {
     const content = fs.readFileSync(settingsPath, "utf8");
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
