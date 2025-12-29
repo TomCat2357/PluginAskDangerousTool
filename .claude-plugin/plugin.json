@@ -1,0 +1,8 @@
+{
+  "name": "ask-dangerous-tool",
+  "version": "0.1.0",
+  "description": "Prompts user confirmation before executing dangerous tools (Write outside project, non-allowlisted Bash commands, etc.)",
+  "author": {
+    "name": "gk3t-"
+  }
+}
