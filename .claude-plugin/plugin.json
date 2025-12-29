@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "Prompts user confirmation before executing dangerous tools (Write outside project, non-allowlisted Bash commands, etc.)",
   "author": {
-    "name": "gk3t-"
-  }
+    "name": "TomCat2357",
+    "email": "user@example.com"
+  },
+  "homepage": "https://github.com/TomCat2357/PluginAskDangerousTool",
+  "repository": "https://github.com/TomCat2357/PluginAskDangerousTool",
+  "license": "MIT",
+  "keywords": ["security", "confirmation", "dangerous-tools", "hook"]
 }

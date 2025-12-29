@@ -1,0 +1,31 @@
+{
+  "name": "ask-dangerous-tool",
+  "owner": {
+    "name": "TomCat2357",
+    "email": "user@example.com"
+  },
+  "metadata": {
+    "description": "Marketplace for AskDangerousTool plugin - prompts user confirmation before dangerous operations",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "ask-dangerous-tool",
+      "source": {
+        "source": "github",
+        "repo": "TomCat2357/PluginAskDangerousTool"
+      },
+      "description": "Prompts user confirmation before executing dangerous tools (Write outside project, non-allowlisted Bash commands, etc.)",
+      "version": "0.1.0",
+      "author": {
+        "name": "TomCat2357",
+        "email": "user@example.com"
+      },
+      "homepage": "https://github.com/TomCat2357/PluginAskDangerousTool",
+      "repository": "https://github.com/TomCat2357/PluginAskDangerousTool",
+      "license": "MIT",
+      "keywords": ["security", "confirmation", "dangerous-tools", "hook"],
+      "category": "security"
+    }
+  ]
+}
