@@ -39,7 +39,7 @@ Settings are loaded with the following priority:
 
 ### For `init` command:
 1. **IMPORTANT**: Use AskUserQuestion to ask the user which scope to initialize (user or project)
-2. Copy from `example.local.md` in the plugin root to the selected location:
+2. Copy from `example.ask-dangerous-tool.local.md` in the plugin root to the selected location:
    - User scope: `~/.claude/ask-dangerous-tool.local.md`
    - Project scope: `<projectroot>/.claude/ask-dangerous-tool.local.md`
 3. Create the `.claude/` directory if it doesn't exist

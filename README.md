@@ -40,13 +40,13 @@ If a project-scope settings file exists, the user-scope file is **not loaded**. 
 **Option 1: User scope (global settings)**
 ```bash
 mkdir -p ~/.claude
-cp /path/to/plugin/example.local.md ~/.claude/ask-dangerous-tool.local.md
+cp /path/to/plugin/example.ask-dangerous-tool.local.md ~/.claude/ask-dangerous-tool.local.md
 ```
 
 **Option 2: Project scope (project-specific settings)**
 ```bash
 mkdir -p .claude
-cp /path/to/plugin/example.local.md .claude/ask-dangerous-tool.local.md
+cp /path/to/plugin/example.ask-dangerous-tool.local.md .claude/ask-dangerous-tool.local.md
 ```
 
 **Option 3: Use the built-in command**
