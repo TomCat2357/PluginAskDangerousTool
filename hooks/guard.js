@@ -9,9 +9,8 @@ const os = require("os");
  */
 function loadSettings(projectRoot) {
   const defaults = {
-    bash_ask_outside_project_prefixes: [],
-    mcp_ask_outside_project: [],
-    write_ask_outside_project: []
+    ask_outside_project: [],
+    ask_always: []
   };
 
   // Priority 1: Project root
@@ -38,31 +37,21 @@ function parseSettings(settingsPath, defaults) {
     const yaml = match[1];
     const settings = { ...defaults };
 
-    // Parse bash_ask_outside_project_prefixes
-    const bashMatch = yaml.match(/bash_ask_outside_project_prefixes:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
-    if (bashMatch) {
-      const lines = bashMatch[1].split(/\r?\n/);
-      settings.bash_ask_outside_project_prefixes = lines
+    // Parse ask_outside_project
+    const outsideMatch = yaml.match(/ask_outside_project:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
+    if (outsideMatch) {
+      const lines = outsideMatch[1].split(/\r?\n/);
+      settings.ask_outside_project = lines
         .map(line => line.match(/^\s*-\s*(.+)/))
         .filter(m => m)
         .map(m => m[1].trim().replace(/^["']|["']$/g, ""));
     }
 
-    // Parse mcp_ask_outside_project
-    const mcpMatch = yaml.match(/mcp_ask_outside_project:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
-    if (mcpMatch) {
-      const lines = mcpMatch[1].split(/\r?\n/);
-      settings.mcp_ask_outside_project = lines
-        .map(line => line.match(/^\s*-\s*(.+)/))
-        .filter(m => m)
-        .map(m => m[1].trim().replace(/^["']|["']$/g, ""));
-    }
-
-    // Parse write_ask_outside_project
-    const writeMatch = yaml.match(/write_ask_outside_project:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
-    if (writeMatch) {
-      const lines = writeMatch[1].split(/\r?\n/);
-      settings.write_ask_outside_project = lines
+    // Parse ask_always
+    const alwaysMatch = yaml.match(/ask_always:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
+    if (alwaysMatch) {
+      const lines = alwaysMatch[1].split(/\r?\n/);
+      settings.ask_always = lines
         .map(line => line.match(/^\s*-\s*(.+)/))
         .filter(m => m)
         .map(m => m[1].trim().replace(/^["']|["']$/g, ""));
@@ -282,6 +271,32 @@ function matchesAnyPrefix(command, prefixes) {
   return false;
 }
 
+function parseEntry(entry) {
+  const parts = entry.trim().split(/\s+/);
+  if (parts.length < 2) return null;
+  const type = parts[0];
+  const pattern = parts.slice(1).join(" ");
+  return { type, pattern };
+}
+
+function matchesEntryPattern(toolName, command, entry) {
+  const parsed = parseEntry(entry);
+  if (!parsed) return false;
+
+  const { type, pattern } = parsed;
+
+  if (type === "bash") {
+    if (!command) return false;
+    return matchesAnyPrefix(command, [pattern]);
+  } else if (type === "mcp") {
+    return matchesMcpPattern(toolName, pattern);
+  } else if (type === "write") {
+    return ["Write", "Edit", "MultiEdit"].includes(toolName) && toolName === pattern;
+  }
+
+  return false;
+}
+
 function matchesMcpPattern(toolName, pattern) {
   if (toolName === pattern) return true;
   if (pattern.endsWith("*")) {
@@ -382,119 +397,83 @@ const settings = loadSettings(absProjectRoot);
 const input = readStdinJson();
 const toolName = input.tool_name || "";
 const toolInput = input.tool_input || {};
+const command = toolName === "Bash" ? (toolInput.command || "").trim() : "";
 
-// Handle Bash tool
-if (toolName === "Bash") {
-  const command = (toolInput.command || "").trim();
-
-  if (!matchesAnyPrefix(command, settings.bash_ask_outside_project_prefixes)) {
-    decide("allow", "Bash command not in ask list.");
+// Check ask_always first - always ask regardless of target paths
+for (const entry of settings.ask_always) {
+  if (matchesEntryPattern(toolName, command, entry)) {
+    const parsed = parseEntry(entry);
+    const displayName = parsed ? `${parsed.type} ${parsed.pattern}` : entry;
+    decide(
+      "ask",
+      [
+        "常に確認が必要なコマンド/ツールです。",
+        `entry: ${displayName}`,
+        toolName === "Bash" ? `command: ${truncateForReason(command, 100)}` : `tool: ${toolName}`,
+        "実行を許可しますか？"
+      ].join("\n")
+    );
     process.exit(0);
   }
-
-  const outsideTargets = findOutsideTargetsFromCommand(command, absProjectRoot);
-  if (outsideTargets.length === 0) {
-    decide("allow", "No outside-project paths detected for Bash command.");
-    process.exit(0);
-  }
-
-  decide(
-    "ask",
-    [
-      "プロジェクト外に干渉する可能性のあるBashコマンドです。",
-      `command: ${truncateForReason(command, 100)}`,
-      `targets: ${outsideTargets.join(", ")}`,
-      "実行を許可しますか？"
-    ].join("\n")
-  );
-  process.exit(0);
 }
 
-// Handle MCP tools (mcp__*)
-if (toolName.startsWith("mcp__")) {
-  const matchesList = settings.mcp_ask_outside_project.some(pattern =>
-    matchesMcpPattern(toolName, pattern)
-  );
+// Check ask_outside_project - ask only if targeting outside project
+for (const entry of settings.ask_outside_project) {
+  if (matchesEntryPattern(toolName, command, entry)) {
+    let outsideTargets = [];
 
-  if (!matchesList) {
-    decide("allow", "MCP tool not in ask list.");
-    process.exit(0);
-  }
-
-  const outsideTargets = findOutsideTargetsFromInput(toolInput, absProjectRoot);
-  if (outsideTargets.length === 0) {
-    decide("allow", "No outside-project paths detected for MCP tool.");
-    process.exit(0);
-  }
-
-  decide(
-    "ask",
-    [
-      "プロジェクト外に干渉する可能性のあるMCPツールです。",
-      `tool: ${toolName}`,
-      `targets: ${outsideTargets.join(", ")}`,
-      "実行を許可しますか？"
-    ].join("\n")
-  );
-  process.exit(0);
-}
-
-// Handle Write/Edit/MultiEdit tools
-if (["Write", "Edit", "MultiEdit"].includes(toolName)) {
-  if (!settings.write_ask_outside_project.includes(toolName)) {
-    decide("allow", "Write/Edit tool not in ask list.");
-    process.exit(0);
-  }
-
-  // Extract paths from tool_input
-  const pathCandidates = [];
-
-  for (const key of ["file_path", "path", "filePath", "filepath"]) {
-    if (typeof toolInput[key] === "string" && toolInput[key].trim()) {
-      pathCandidates.push(toolInput[key].trim());
-    }
-  }
-
-  if (Array.isArray(toolInput.edits)) {
-    for (const e of toolInput.edits) {
-      if (e && typeof e.file_path === "string" && e.file_path.trim()) {
-        pathCandidates.push(e.file_path.trim());
+    if (toolName === "Bash") {
+      outsideTargets = findOutsideTargetsFromCommand(command, absProjectRoot);
+    } else if (toolName.startsWith("mcp__")) {
+      outsideTargets = findOutsideTargetsFromInput(toolInput, absProjectRoot);
+    } else if (["Write", "Edit", "MultiEdit"].includes(toolName)) {
+      const pathCandidates = [];
+      for (const key of ["file_path", "path", "filePath", "filepath"]) {
+        if (typeof toolInput[key] === "string" && toolInput[key].trim()) {
+          pathCandidates.push(toolInput[key].trim());
+        }
       }
-      if (e && typeof e.path === "string" && e.path.trim()) {
-        pathCandidates.push(e.path.trim());
+      if (Array.isArray(toolInput.edits)) {
+        for (const e of toolInput.edits) {
+          if (e && typeof e.file_path === "string" && e.file_path.trim()) {
+            pathCandidates.push(e.file_path.trim());
+          }
+          if (e && typeof e.path === "string" && e.path.trim()) {
+            pathCandidates.push(e.path.trim());
+          }
+        }
+      }
+      const uniquePaths = [...new Set(pathCandidates)];
+      for (const p of uniquePaths) {
+        const absTarget = realOrResolve(p, absProjectRoot);
+        if (!isInsideProject(absTarget, absProjectRoot)) {
+          outsideTargets.push(absTarget);
+        }
       }
     }
-  }
 
-  const uniquePaths = [...new Set(pathCandidates)];
-
-  if (uniquePaths.length === 0) {
-    decide("allow", `No target paths detected for ${toolName}.`);
-    process.exit(0);
-  }
-
-  // Check each path
-  for (const p of uniquePaths) {
-    const absTarget = realOrResolve(p, absProjectRoot);
-
-    if (!isInsideProject(absTarget, absProjectRoot)) {
+    if (outsideTargets.length > 0) {
+      const parsed = parseEntry(entry);
+      const displayName = parsed ? `${parsed.type} ${parsed.pattern}` : entry;
       decide(
         "ask",
         [
-          "プロジェクト外への書き込み/編集が検出されました。",
-          `projectRoot: ${absProjectRoot}`,
-          `target: ${absTarget}`,
-          "続行しますか？"
+          "プロジェクト外に干渉する可能性があるコマンド/ツールです。",
+          `entry: ${displayName}`,
+          toolName === "Bash" ? `command: ${truncateForReason(command, 100)}` : `tool: ${toolName}`,
+          `targets: ${outsideTargets.join(", ")}`,
+          "実行を許可しますか？"
         ].join("\n")
       );
       process.exit(0);
     }
-  }
 
-  decide("allow", "All target paths are within the project root.");
-  process.exit(0);
+    // Matched entry but no outside targets - allow
+    decide("allow", "Matched entry but no outside-project paths detected.");
+    process.exit(0);
+  }
 }
 
-// Fallback
-decide("allow", "Tool not in scope.");
+// No matches in either list - allow
+decide("allow", "Tool/command not in ask list.");
 process.exit(0);

@@ -1,6 +1,6 @@
 ---
 description: "Edit the ask list for dangerous tool protection"
-argument-hint: "[add|remove|show|init] [bash|mcp|write] [pattern] [--scope user|project]"
+argument-hint: "[add|remove|show|init] [outside|always] [command] [--scope user|project]"
 allowed-tools:
   - Read
   - Write
@@ -23,26 +23,45 @@ If no settings file exists, all commands/tools are treated as allowed.
 ## Arguments
 
 - `show` - Display current ask list settings
-- `add bash <prefix>` - Add a Bash command prefix that requires confirmation when targeting outside the project
-- `add mcp <pattern>` - Add an MCP tool pattern that requires confirmation when targeting outside the project (supports `*` wildcard)
-- `add write <tool>` - Add a Write/Edit tool name that requires confirmation when targeting outside the project
-- `remove bash <prefix>` - Remove a Bash command prefix
-- `remove mcp <pattern>` - Remove an MCP tool pattern
-- `remove write <tool>` - Remove a Write/Edit tool name
+- `add outside <command>` - Add a command that requires confirmation when targeting outside the project
+- `add always <command>` - Add a command that always requires confirmation
+- `remove outside <command>` - Remove a command from the outside list
+- `remove always <command>` - Remove a command from the always list
 - `init` - Initialize `.asklist.md` from example template
 - `--scope [user|project]` - Specify the scope for the settings file
   - `user` - Save to `~/.claude/.asklist.md` (global settings for all projects)
   - `project` - Save to `<projectroot>/.asklist.md` (project-specific settings)
   - If not specified, defaults to project scope for `add/remove/init`, and shows both for `show`
 
+### Command Format
+
+Commands should be in the format: `<type> <pattern>`
+
+- `bash <command>` - Bash command prefix (e.g., `bash rm`, `bash git clean`)
+- `mcp <pattern>` - MCP tool pattern (e.g., `mcp mcp__filesystem__*`)
+- `write <toolname>` - Write/Edit tool (e.g., `write Write`, `write Edit`)
+
+## Interactive Mode
+
+When run without arguments or with only `--scope`, the command enters interactive mode and guides you through the configuration process with questions.
+
 ## Instructions
+
+### For Interactive Mode (no arguments or only `--scope`):
+1. Determine the target scope (user or project based on `--scope`, default to project)
+2. Use AskUserQuestion to guide the user through configuration:
+   - Ask which action they want to perform (show, add, remove, init)
+   - For add/remove: Ask which list (outside or always)
+   - For add/remove: Ask for the command format (provide examples: `bash rm`, `mcp mcp__filesystem__*`, `write Write`)
+3. Execute the selected action
 
 ### For `show` command:
 1. If `--scope user` is specified, only show `~/.claude/.asklist.md`
 2. If `--scope project` is specified, only show `<projectroot>/.asklist.md`
 3. If no scope is specified, show both files (project first, then user)
 4. Display the current lists in a readable format
-5. Indicate when no settings file exists
+5. Show entries grouped by list (ask_outside_project, ask_always)
+6. Indicate when no settings file exists
 
 ### For `init` command:
 1. Determine the target location based on `--scope`:
@@ -59,22 +78,28 @@ If no settings file exists, all commands/tools are treated as allowed.
 3. If no settings file exists, initialize it from `example.asklist.md` (plugin root)
 4. Load the existing settings
 5. Parse the YAML frontmatter to get current settings
-6. Add or remove the pattern from the appropriate list
-7. Write the updated settings back to the file
+6. Determine the target list based on the second argument:
+   - `outside` → `ask_outside_project` list
+   - `always` → `ask_always` list
+7. Add or remove the command from the appropriate list
+8. Write the updated settings back to the file
 
 ## Settings File Format
 
 ```markdown
 ---
-bash_ask_outside_project_prefixes:
-  - rm
-  - mv
-mcp_ask_outside_project:
-  - mcp__filesystem__write_file
-  - mcp__filesystem__*
-write_ask_outside_project:
-  - Write
-  - Edit
+# Commands/tools that require confirmation when targeting paths outside the project
+ask_outside_project:
+  - bash rm
+  - bash mv
+  - mcp mcp__filesystem__*
+  - write Write
+  - write Edit
+
+# Commands/tools that always require confirmation regardless of target paths
+ask_always:
+  - bash dd
+  - bash sudo rm -rf
 ---
 
 # Notes
@@ -84,13 +109,25 @@ Additional notes can go here.
 
 ## Example Usage
 
+### Interactive Mode
+- `/ask-dangerous-tool:edit-asklist` - Enter interactive mode (project scope)
+- `/ask-dangerous-tool:edit-asklist --scope user` - Enter interactive mode (user scope)
+
+### Show Command
 - `/ask-dangerous-tool:edit-asklist show` - Show current settings (both project and user)
 - `/ask-dangerous-tool:edit-asklist show --scope user` - Show only user-level settings
 - `/ask-dangerous-tool:edit-asklist show --scope project` - Show only project-level settings
-- `/ask-dangerous-tool:edit-asklist add bash rm` - Ask when `rm` targets paths outside the project (project scope)
-- `/ask-dangerous-tool:edit-asklist add bash rm --scope user` - Add to user-level settings
-- `/ask-dangerous-tool:edit-asklist add mcp mcp__filesystem__*` - Ask for matching MCP tools when they target paths outside the project
-- `/ask-dangerous-tool:edit-asklist add write Write --scope project` - Ask when Write targets paths outside the project (project scope)
-- `/ask-dangerous-tool:edit-asklist remove bash rm` - Remove `rm` from the list (project scope)
+
+### Add Command
+- `/ask-dangerous-tool:edit-asklist add outside "bash rm"` - Add `bash rm` to ask_outside_project (project scope)
+- `/ask-dangerous-tool:edit-asklist add always "bash dd"` - Add `bash dd` to ask_always (project scope)
+- `/ask-dangerous-tool:edit-asklist add outside "mcp mcp__filesystem__*" --scope user` - Add to user-level ask_outside_project
+- `/ask-dangerous-tool:edit-asklist add outside "write Write"` - Add Write tool to ask_outside_project
+
+### Remove Command
+- `/ask-dangerous-tool:edit-asklist remove outside "bash rm"` - Remove `bash rm` from ask_outside_project (project scope)
+- `/ask-dangerous-tool:edit-asklist remove always "bash dd"` - Remove `bash dd` from ask_always
+
+### Init Command
 - `/ask-dangerous-tool:edit-asklist init` - Initialize `.asklist.md` from template (project scope)
 - `/ask-dangerous-tool:edit-asklist init --scope user` - Initialize user-level `.asklist.md` from template
