@@ -38,7 +38,7 @@ function parseSettings(settingsPath, defaults) {
     const settings = { ...defaults };
 
     // Parse ask_outside_project
-    const outsideMatch = yaml.match(/ask_outside_project:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
+    const outsideMatch = yaml.match(/ask_outside_project:\s*\r?\n((?:\s+.+\r?\n?)*)/);
     if (outsideMatch) {
       const lines = outsideMatch[1].split(/\r?\n/);
       settings.ask_outside_project = lines
@@ -48,7 +48,7 @@ function parseSettings(settingsPath, defaults) {
     }
 
     // Parse ask_always
-    const alwaysMatch = yaml.match(/ask_always:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
+    const alwaysMatch = yaml.match(/ask_always:\s*\r?\n((?:\s+.+\r?\n?)*)/);
     if (alwaysMatch) {
       const lines = alwaysMatch[1].split(/\r?\n/);
       settings.ask_always = lines
