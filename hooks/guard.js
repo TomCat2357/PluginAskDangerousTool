@@ -5,16 +5,18 @@ const os = require("os");
 
 /**
  * Read settings from .asklist.md
- * Priority: 1. <projectroot>/.asklist.md  2. ~/.claude/.asklist.md
+ * Priority: 1. <projectroot>/.claude/.asklist.md  2. ~/.claude/.asklist.md
+ * If no settings file exists, returns { noSettingsFile: true } to trigger ask for all
  */
 function loadSettings(projectRoot) {
   const defaults = {
     ask_outside_project: [],
-    ask_always: []
+    ask_always: [],
+    noSettingsFile: false
   };
 
-  // Priority 1: Project root
-  const projectSettingsPath = path.join(projectRoot, ".asklist.md");
+  // Priority 1: Project root .claude directory
+  const projectSettingsPath = path.join(projectRoot, ".claude", ".asklist.md");
   if (fs.existsSync(projectSettingsPath)) {
     return parseSettings(projectSettingsPath, defaults);
   }
@@ -25,7 +27,8 @@ function loadSettings(projectRoot) {
     return parseSettings(userSettingsPath, defaults);
   }
 
-  return defaults;
+  // No settings file found - mark for ask-all behavior
+  return { ...defaults, noSettingsFile: true };
 }
 
 function parseSettings(settingsPath, defaults) {
@@ -420,6 +423,24 @@ const input = readStdinJson();
 const toolName = input.tool_name || "";
 const toolInput = input.tool_input || {};
 const command = toolName === "Bash" ? (toolInput.command || "").trim() : "";
+
+// If no settings file exists, ask for all tools and recommend init
+if (settings.noSettingsFile) {
+  decide(
+    "ask",
+    [
+      "⚠️ .asklist.md 設定ファイルが見つかりません。",
+      "設定がない間、全てのツール呼び出しに確認が必要です。",
+      "",
+      "初期化するには以下のコマンドを実行してください:",
+      "  /ask-dangerous-tool:edit-asklist init",
+      "",
+      toolName === "Bash" ? `command: ${truncateForReason(command, 100)}` : `tool: ${toolName}`,
+      "実行を許可しますか？"
+    ].join("\n")
+  );
+  process.exit(0);
+}
 
 // Check ask_always first - always ask regardless of target paths
 for (const entry of settings.ask_always) {

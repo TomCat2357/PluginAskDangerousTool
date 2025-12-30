@@ -55,12 +55,12 @@ This file lists commands/tools that should trigger confirmation dialogs.
 
 ## How to Use
 
-1. Copy this file to `.asklist.md` in your project root or `~/.claude/.asklist.md`
+1. Copy this file to `.claude/.asklist.md` in your project root or `~/.claude/.asklist.md`
 2. Customize the lists for your workflow
 
 ## Settings Priority
 
-1. `<projectroot>/.asklist.md` (project-specific)
+1. `<projectroot>/.claude/.asklist.md` (project-specific)
 2. `~/.claude/.asklist.md` (user-wide fallback)
 
 ## Entry Format

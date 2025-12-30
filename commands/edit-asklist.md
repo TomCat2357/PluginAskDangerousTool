@@ -15,10 +15,10 @@ Manage the ask list settings in `.asklist.md`.
 ## Settings File Location
 
 Settings are loaded from (in priority order):
-1. **Project root**: `<projectroot>/.asklist.md`
+1. **Project root**: `<projectroot>/.claude/.asklist.md`
 2. **User home**: `~/.claude/.asklist.md`
 
-If no settings file exists, all commands/tools are treated as allowed.
+If no settings file exists, all commands/tools will require confirmation (ask for all).
 
 ## Arguments
 
@@ -30,7 +30,7 @@ If no settings file exists, all commands/tools are treated as allowed.
 - `init` - Initialize `.asklist.md` from example template
 - `--scope [user|project]` - Specify the scope for the settings file
   - `user` - Save to `~/.claude/.asklist.md` (global settings for all projects)
-  - `project` - Save to `<projectroot>/.asklist.md` (project-specific settings)
+  - `project` - Save to `<projectroot>/.claude/.asklist.md` (project-specific settings)
   - If not specified, defaults to project scope for `add/remove/init`, and shows both for `show`
 
 ### Command Format
@@ -57,7 +57,7 @@ When run without arguments or with only `--scope`, the command enters interactiv
 
 ### For `show` command:
 1. If `--scope user` is specified, only show `~/.claude/.asklist.md`
-2. If `--scope project` is specified, only show `<projectroot>/.asklist.md`
+2. If `--scope project` is specified, only show `<projectroot>/.claude/.asklist.md`
 3. If no scope is specified, show both files (project first, then user)
 4. Display the current lists in a readable format
 5. Show entries grouped by list (ask_outside_project, ask_always)
@@ -66,14 +66,14 @@ When run without arguments or with only `--scope`, the command enters interactiv
 ### For `init` command:
 1. Determine the target location based on `--scope`:
    - `--scope user`: `~/.claude/.asklist.md`
-   - `--scope project` or no scope: `<projectroot>/.asklist.md`
+   - `--scope project` or no scope: `<projectroot>/.claude/.asklist.md`
 2. Copy from `example.asklist.md` in the plugin root (e.g. `~/.claude/plugins/marketplaces/ask-dangerous-tool-plugin/example.asklist.md`) to the target location
 3. If the file already exists, do not overwrite it unless the user explicitly asks
 
 ### For `add` and `remove` commands:
 1. Determine the target location based on `--scope`:
    - `--scope user`: `~/.claude/.asklist.md`
-   - `--scope project` or no scope: `<projectroot>/.asklist.md`
+   - `--scope project` or no scope: `<projectroot>/.claude/.asklist.md`
 2. Check if the target settings file exists
 3. If no settings file exists, initialize it from `example.asklist.md` (plugin root)
 4. Load the existing settings

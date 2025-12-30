@@ -27,37 +27,41 @@ Copy the plugin to your project's `.claude-plugin/` directory.
 
 This plugin loads settings from `.asklist.md` with the following priority:
 
-1. **Project root**: `<projectroot>/.asklist.md`
+1. **Project root**: `<projectroot>/.claude/.asklist.md`
 2. **User home**: `~/.claude/.asklist.md`
 
-If no settings file exists, all commands/tools are allowed by default.
+If no settings file exists, all commands/tools will require confirmation (ask for all).
 
 ### Initial Setup
 
 **Option 1: Copy the template**
 ```bash
-cp /path/to/plugin/example.asklist.md .asklist.md
+mkdir -p .claude
+cp /path/to/plugin/example.asklist.md .claude/.asklist.md
 ```
 
 **Option 2: Use the built-in command**
 ```
 /ask-dangerous-tool:edit-asklist init
 ```
-This will initialize `.asklist.md` from the template if needed.
+This will initialize `.claude/.asklist.md` from the template if needed.
 
 ### Settings Format
 
 ```yaml
 ---
-bash_ask_outside_project_prefixes:
-  - rm
-  - mv
-mcp_ask_outside_project:
-  - mcp__filesystem__write_file
-  - mcp__filesystem__*
-write_ask_outside_project:
-  - Write
-  - Edit
+# Commands/tools that require confirmation when targeting paths outside the project
+ask_outside_project:
+  - bash rm
+  - bash mv
+  - mcp mcp__filesystem__*
+  - write Write
+  - write Edit
+
+# Commands/tools that always require confirmation regardless of target paths
+ask_always:
+  - bash dd
+  - bash sudo rm -rf
 ---
 ```
 
@@ -81,12 +85,11 @@ Manage ask list settings interactively.
 ### Guard (`guard.js`)
 
 - Monitors `Write`, `Edit`, `MultiEdit`, `Bash`, and `mcp__*` tools
-- Allows operations inside project directory automatically
-- Asks for confirmation when:
-  - The Bash command matches `bash_ask_outside_project_prefixes` and targets outside the project
-  - The MCP tool matches `mcp_ask_outside_project` and targets outside the project
-  - The Write/Edit tool is listed in `write_ask_outside_project` and the target is outside the project
-- Allows everything else
+- If no settings file exists, asks for confirmation for ALL tools
+- When settings exist:
+  - Checks `ask_always` first - always asks regardless of target paths
+  - Checks `ask_outside_project` - asks only when targeting paths outside the project
+  - Allows everything else
 
 ## Settings Format
 
@@ -94,14 +97,21 @@ The settings file uses YAML frontmatter in a Markdown file:
 
 | Setting | Type | Description |
 |---------|------|-------------|
-| `bash_ask_outside_project_prefixes` | string[] | Bash prefixes that require confirmation when they target outside the project |
-| `mcp_ask_outside_project` | string[] | MCP tool names/patterns that require confirmation when they target outside the project |
-| `write_ask_outside_project` | string[] | Write/Edit tool names that require confirmation when they target outside the project |
+| `ask_outside_project` | string[] | Entries that require confirmation when targeting outside the project |
+| `ask_always` | string[] | Entries that always require confirmation regardless of target paths |
+
+### Entry Format
+
+Each entry has the format: `<type> <pattern>`
+
+- **bash**: `bash <command>` - Matches bash commands by prefix
+- **mcp**: `mcp <pattern>` - Matches MCP tools (supports `*` wildcard)
+- **write**: `write <toolname>` - Matches Write/Edit/MultiEdit tools
 
 ### Wildcard Support
 
-- `mcp_ask_outside_project` supports `*` suffix for prefix matching
-- Example: `mcp__filesystem__*` matches all filesystem tools
+- MCP patterns support `*` suffix for prefix matching
+- Example: `mcp mcp__filesystem__*` matches all filesystem tools
 
 ## License
 
