@@ -7,7 +7,7 @@ Claude Code plugin that prompts user confirmation before executing potentially d
 - **Write Protection**: Asks for confirmation when listed Write/Edit tools target paths outside the project directory
 - **Bash Guard**: Asks for confirmation for listed Bash prefixes that target paths outside the project
 - **MCP Tool Guard**: Asks for confirmation for listed MCP tools that target paths outside the project
-- **Customizable Permission List**: Configure per-project rules via `.permission.md`
+- **Customizable Ask List**: Configure per-project rules via `.asklist.md`
 
 ## Installation
 
@@ -25,9 +25,10 @@ Copy the plugin to your project's `.claude-plugin/` directory.
 
 ### Settings File Location
 
-This plugin loads settings from `.permission.md` in the project root:
+This plugin loads settings from `.asklist.md` with the following priority:
 
-1. **Project root**: `<projectroot>/.permission.md`
+1. **Project root**: `<projectroot>/.asklist.md`
+2. **User home**: `~/.claude/.asklist.md`
 
 If no settings file exists, all commands/tools are allowed by default.
 
@@ -35,14 +36,14 @@ If no settings file exists, all commands/tools are allowed by default.
 
 **Option 1: Copy the template**
 ```bash
-cp /path/to/plugin/example.permission.md .permission.md
+cp /path/to/plugin/example.asklist.md .asklist.md
 ```
 
 **Option 2: Use the built-in command**
 ```
-/ask-dangerous-tool:edit-allowlist init
+/ask-dangerous-tool:edit-asklist init
 ```
-This will initialize `.permission.md` from the template if needed.
+This will initialize `.asklist.md` from the template if needed.
 
 ### Settings Format
 
@@ -62,33 +63,29 @@ write_ask_outside_project:
 
 ## Commands
 
-### `/ask-dangerous-tool:edit-allowlist`
+### `/ask-dangerous-tool:edit-asklist`
 
-Manage permission list settings interactively.
+Manage ask list settings interactively.
 
 ```
-/ask-dangerous-tool:edit-allowlist show              # Show current settings
-/ask-dangerous-tool:edit-allowlist add bash rm       # Add Bash prefix
-/ask-dangerous-tool:edit-allowlist add mcp mcp__*    # Add MCP pattern
-/ask-dangerous-tool:edit-allowlist add write Write  # Add Write tool
-/ask-dangerous-tool:edit-allowlist remove bash rm    # Remove Bash prefix
-/ask-dangerous-tool:edit-allowlist init              # Initialize from template
+/ask-dangerous-tool:edit-asklist show              # Show current settings
+/ask-dangerous-tool:edit-asklist add bash rm       # Add Bash prefix
+/ask-dangerous-tool:edit-asklist add mcp mcp__*    # Add MCP pattern
+/ask-dangerous-tool:edit-asklist add write Write   # Add Write tool
+/ask-dangerous-tool:edit-asklist remove bash rm    # Remove Bash prefix
+/ask-dangerous-tool:edit-asklist init              # Initialize from template
 ```
 
 ## How It Works
 
-### Write/Edit Guard (`writepath-guard.js`)
+### Guard (`guard.js`)
 
-- Monitors `Write`, `Edit`, `MultiEdit` tools
+- Monitors `Write`, `Edit`, `MultiEdit`, `Bash`, and `mcp__*` tools
 - Allows operations inside project directory automatically
-- Asks for confirmation when the tool is listed in `write_ask_outside_project` and the target is outside the project
-
-### Command Guard (`command-guard.js`)
-
-- Monitors `Bash` and `mcp__*` tools
 - Asks for confirmation when:
   - The Bash command matches `bash_ask_outside_project_prefixes` and targets outside the project
   - The MCP tool matches `mcp_ask_outside_project` and targets outside the project
+  - The Write/Edit tool is listed in `write_ask_outside_project` and the target is outside the project
 - Allows everything else
 
 ## Settings Format
