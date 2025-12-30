@@ -4,10 +4,10 @@ Claude Code plugin that prompts user confirmation before executing potentially d
 
 ## Features
 
-- **Write Protection**: Asks for confirmation when writing/editing files outside the project directory
-- **Bash Guard**: Asks for confirmation for Bash commands not in the allow list
-- **MCP Tool Guard**: Asks for confirmation for MCP tools not in the allow list
-- **Customizable Allow Lists**: Configure per-project allow lists via `.local.md` settings
+- **Write Protection**: Asks for confirmation when listed Write/Edit tools target paths outside the project directory
+- **Bash Guard**: Asks for confirmation for listed Bash prefixes that target paths outside the project
+- **MCP Tool Guard**: Asks for confirmation for listed MCP tools that target paths outside the project
+- **Customizable Permission List**: Configure per-project rules via `.permission.md`
 
 ## Installation
 
@@ -23,51 +23,40 @@ Copy the plugin to your project's `.claude-plugin/` directory.
 
 ## Configuration
 
-### Settings File Locations and Priority
+### Settings File Location
 
-This plugin loads settings from `.claude/ask-dangerous-tool.local.md` with the following priority:
+This plugin loads settings from `.permission.md` in the project root:
 
-1. **Project scope** (highest priority): `<projectroot>/.claude/ask-dangerous-tool.local.md`
-2. **User scope** (fallback): `~/.claude/ask-dangerous-tool.local.md`
-3. **Defaults**: Empty allow lists (if no settings file exists)
+1. **Project root**: `<projectroot>/.permission.md`
 
-If a project-scope settings file exists, the user-scope file is **not loaded**. This allows you to:
-- Set global defaults in `~/.claude/ask-dangerous-tool.local.md`
-- Override settings per-project in `<projectroot>/.claude/ask-dangerous-tool.local.md`
+If no settings file exists, all commands/tools are allowed by default.
 
 ### Initial Setup
 
-**Option 1: User scope (global settings)**
+**Option 1: Copy the template**
 ```bash
-mkdir -p ~/.claude
-cp /path/to/plugin/example.ask-dangerous-tool.local.md ~/.claude/ask-dangerous-tool.local.md
+cp /path/to/plugin/example.permission.md .permission.md
 ```
 
-**Option 2: Project scope (project-specific settings)**
-```bash
-mkdir -p .claude
-cp /path/to/plugin/example.ask-dangerous-tool.local.md .claude/ask-dangerous-tool.local.md
-```
-
-**Option 3: Use the built-in command**
+**Option 2: Use the built-in command**
 ```
 /ask-dangerous-tool:edit-allowlist init
 ```
-This will prompt you to choose user or project scope.
+This will initialize `.permission.md` from the template if needed.
 
 ### Settings Format
 
 ```yaml
 ---
-bash_allow_prefixes:
-  - pwd
-  - ls
-  - git status
-mcp_allow_list:
-  - mcp__serena__read_file
-  - mcp__serena__*
-write_allow_outside_project:
-  - ~/.config/myapp
+bash_ask_outside_project_prefixes:
+  - rm
+  - mv
+mcp_ask_outside_project:
+  - mcp__filesystem__write_file
+  - mcp__filesystem__*
+write_ask_outside_project:
+  - Write
+  - Edit
 ---
 ```
 
@@ -75,12 +64,13 @@ write_allow_outside_project:
 
 ### `/ask-dangerous-tool:edit-allowlist`
 
-Manage allow list settings interactively.
+Manage permission list settings interactively.
 
 ```
 /ask-dangerous-tool:edit-allowlist show              # Show current settings
-/ask-dangerous-tool:edit-allowlist add bash npm run  # Add Bash prefix
+/ask-dangerous-tool:edit-allowlist add bash rm       # Add Bash prefix
 /ask-dangerous-tool:edit-allowlist add mcp mcp__*    # Add MCP pattern
+/ask-dangerous-tool:edit-allowlist add write Write  # Add Write tool
 /ask-dangerous-tool:edit-allowlist remove bash rm    # Remove Bash prefix
 /ask-dangerous-tool:edit-allowlist init              # Initialize from template
 ```
@@ -91,15 +81,15 @@ Manage allow list settings interactively.
 
 - Monitors `Write`, `Edit`, `MultiEdit` tools
 - Allows operations inside project directory automatically
-- Asks for confirmation for operations outside project directory
-- Respects `write_allow_outside_project` settings
+- Asks for confirmation when the tool is listed in `write_ask_outside_project` and the target is outside the project
 
 ### Command Guard (`command-guard.js`)
 
 - Monitors `Bash` and `mcp__*` tools
-- Allows commands matching `bash_allow_prefixes` (prefix match)
-- Allows MCP tools matching `mcp_allow_list` (exact or wildcard match)
-- Asks for confirmation for everything else
+- Asks for confirmation when:
+  - The Bash command matches `bash_ask_outside_project_prefixes` and targets outside the project
+  - The MCP tool matches `mcp_ask_outside_project` and targets outside the project
+- Allows everything else
 
 ## Settings Format
 
@@ -107,14 +97,14 @@ The settings file uses YAML frontmatter in a Markdown file:
 
 | Setting | Type | Description |
 |---------|------|-------------|
-| `bash_allow_prefixes` | string[] | Bash command prefixes to auto-allow |
-| `mcp_allow_list` | string[] | MCP tool names/patterns to auto-allow |
-| `write_allow_outside_project` | string[] | Paths outside project to allow writing |
+| `bash_ask_outside_project_prefixes` | string[] | Bash prefixes that require confirmation when they target outside the project |
+| `mcp_ask_outside_project` | string[] | MCP tool names/patterns that require confirmation when they target outside the project |
+| `write_ask_outside_project` | string[] | Write/Edit tool names that require confirmation when they target outside the project |
 
 ### Wildcard Support
 
-- `mcp_allow_list` supports `*` suffix for prefix matching
-- Example: `mcp__serena__*` matches all Serena tools
+- `mcp_ask_outside_project` supports `*` suffix for prefix matching
+- Example: `mcp__filesystem__*` matches all filesystem tools
 
 ## License
 

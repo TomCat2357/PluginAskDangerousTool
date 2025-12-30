@@ -4,29 +4,20 @@ const path = require("path");
 const os = require("os");
 
 /**
- * Read settings from .claude/ask-dangerous-tool.local.md
- * Priority: project scope > user scope > defaults
- * Format: YAML frontmatter with bash_allow_prefixes and mcp_allow_list
+ * Read settings from .permission.md
+ * Format: YAML frontmatter with bash_ask_outside_project_prefixes and mcp_ask_outside_project
  */
 function loadSettings(projectRoot) {
   const defaults = {
-    bash_allow_prefixes: [],
-    mcp_allow_list: []
+    bash_ask_outside_project_prefixes: [],
+    mcp_ask_outside_project: []
   };
 
-  // Try project scope first
-  const projectPath = path.join(projectRoot, ".claude", "ask-dangerous-tool.local.md");
-  if (fs.existsSync(projectPath)) {
-    return parseSettings(projectPath, defaults);
+  const settingsPath = path.join(projectRoot, ".permission.md");
+  if (fs.existsSync(settingsPath)) {
+    return parseSettings(settingsPath, defaults);
   }
 
-  // Fall back to user scope
-  const userPath = path.join(os.homedir(), ".claude", "ask-dangerous-tool.local.md");
-  if (fs.existsSync(userPath)) {
-    return parseSettings(userPath, defaults);
-  }
-
-  // No settings found, return defaults
   return defaults;
 }
 
@@ -39,21 +30,21 @@ function parseSettings(settingsPath, defaults) {
     const yaml = match[1];
     const settings = { ...defaults };
 
-    // Parse bash_allow_prefixes
-    const bashMatch = yaml.match(/bash_allow_prefixes:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
+    // Parse bash_ask_outside_project_prefixes
+    const bashMatch = yaml.match(/bash_ask_outside_project_prefixes:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
     if (bashMatch) {
       const lines = bashMatch[1].split(/\r?\n/);
-      settings.bash_allow_prefixes = lines
+      settings.bash_ask_outside_project_prefixes = lines
         .map(line => line.match(/^\s*-\s*(.+)/))
         .filter(m => m)
         .map(m => m[1].trim().replace(/^["']|["']$/g, ""));
     }
 
-    // Parse mcp_allow_list
-    const mcpMatch = yaml.match(/mcp_allow_list:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
+    // Parse mcp_ask_outside_project
+    const mcpMatch = yaml.match(/mcp_ask_outside_project:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
     if (mcpMatch) {
       const lines = mcpMatch[1].split(/\r?\n/);
-      settings.mcp_allow_list = lines
+      settings.mcp_ask_outside_project = lines
         .map(line => line.match(/^\s*-\s*(.+)/))
         .filter(m => m)
         .map(m => m[1].trim().replace(/^["']|["']$/g, ""));
@@ -86,12 +77,282 @@ function decide(decision, reason) {
   );
 }
 
+function realOrResolve(p, baseDir) {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(baseDir, p);
+  }
+}
+
+function isInsideProject(absTarget, absProjectRoot) {
+  const rel = path.relative(absProjectRoot, absTarget);
+  return !rel.startsWith("..") && !path.isAbsolute(rel);
+}
+
+function tokenizeCommand(command) {
+  const tokens = [];
+  let current = "";
+  let quote = null;
+  let escape = false;
+
+  for (const ch of command) {
+    if (escape) {
+      current += ch;
+      escape = false;
+      continue;
+    }
+    if (ch === "\\") {
+      escape = true;
+      continue;
+    }
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+        continue;
+      }
+      current += ch;
+      continue;
+    }
+    if (ch === "'" || ch === "\"") {
+      quote = ch;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (current) {
+        tokens.push(current);
+        current = "";
+      }
+      continue;
+    }
+    current += ch;
+  }
+
+  if (current) {
+    tokens.push(current);
+  }
+
+  return tokens;
+}
+
+function stripQuotes(value) {
+  return value.replace(/^["']|["']$/g, "");
+}
+
+function looksLikePath(value) {
+  if (!value) return false;
+  if (value.includes("://")) return false;
+  if (value === "." || value === "..") return true;
+  if (value.startsWith("~/") || value === "~") return true;
+  if (value.startsWith("./") || value.startsWith("../")) return true;
+  if (/^[A-Za-z]:[\\/]/.test(value)) return true;
+  if (path.isAbsolute(value)) return true;
+  if (value.includes("/")) return true;
+  return false;
+}
+
+function extractPathCandidates(command) {
+  const tokens = tokenizeCommand(command);
+  const candidates = [];
+  const pathValueFlags = new Set([
+    "-C",
+    "--cwd",
+    "--work-tree",
+    "--directory"
+  ]);
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = stripQuotes(tokens[i] || "");
+    if (!token) continue;
+
+    if (pathValueFlags.has(token) && tokens[i + 1]) {
+      candidates.push(stripQuotes(tokens[i + 1]));
+      i += 1;
+      continue;
+    }
+
+    const eqIndex = token.indexOf("=");
+    if (eqIndex > 0) {
+      const value = token.slice(eqIndex + 1);
+      if (looksLikePath(value)) {
+        candidates.push(value);
+      }
+      continue;
+    }
+
+    if (looksLikePath(token)) {
+      candidates.push(token);
+    }
+  }
+
+  return candidates;
+}
+
+function resolvePathCandidate(candidate, projectRoot) {
+  if (!candidate) return null;
+  let value = candidate;
+  if (value === "~") {
+    value = os.homedir();
+  } else if (value.startsWith("~/")) {
+    value = path.join(os.homedir(), value.slice(2));
+  }
+  if (/^[A-Za-z]:[\\/]/.test(value)) {
+    return path.resolve(value);
+  }
+  if (path.isAbsolute(value)) {
+    return path.resolve(value);
+  }
+  return path.resolve(projectRoot, value);
+}
+
+function findOutsideTargetsFromCommand(command, absProjectRoot) {
+  const candidates = extractPathCandidates(command);
+  const outside = [];
+
+  for (const candidate of candidates) {
+    const absTarget = realOrResolve(
+      resolvePathCandidate(candidate, absProjectRoot) || candidate,
+      absProjectRoot
+    );
+    if (!isInsideProject(absTarget, absProjectRoot)) {
+      outside.push(absTarget);
+    }
+  }
+
+  return [...new Set(outside)];
+}
+
+function matchesPrefix(command, prefix) {
+  if (!command || !prefix) return false;
+  return (
+    command === prefix ||
+    command.startsWith(prefix + " ") ||
+    command.startsWith(prefix + "\t") ||
+    command.startsWith(prefix + ";") ||
+    command.startsWith(prefix + "&") ||
+    command.startsWith(prefix + "|")
+  );
+}
+
+function matchesAnyPrefix(command, prefixes) {
+  const trimmed = command.trim();
+  if (!trimmed) return false;
+
+  const variants = [trimmed];
+  if (trimmed.startsWith("sudo ")) {
+    variants.push(trimmed.replace(/^sudo\s+/, ""));
+  }
+  if (trimmed.startsWith("env ")) {
+    variants.push(trimmed.replace(/^env\s+/, ""));
+  }
+
+  for (const prefix of prefixes) {
+    for (const variant of variants) {
+      if (matchesPrefix(variant, prefix)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function matchesMcpPattern(toolName, pattern) {
+  if (toolName === pattern) return true;
+  if (pattern.endsWith("*")) {
+    const prefix = pattern.slice(0, -1);
+    return toolName.startsWith(prefix);
+  }
+  return false;
+}
+
+function truncateForReason(value, maxLength) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength)}...`;
+}
+
+function collectPathCandidatesFromInput(input, candidates, depth) {
+  if (!input || typeof input !== "object") return;
+  if (depth > 4) return;
+
+  const pathKeys = new Set([
+    "path",
+    "file_path",
+    "filePath",
+    "filepath",
+    "target_path",
+    "targetPath",
+    "source_path",
+    "sourcePath",
+    "dest_path",
+    "destPath",
+    "output_path",
+    "outputPath",
+    "directory",
+    "dir"
+  ]);
+
+  const pathArrayKeys = new Set([
+    "paths",
+    "file_paths",
+    "files",
+    "targets",
+    "sources",
+    "destinations"
+  ]);
+
+  for (const [key, value] of Object.entries(input)) {
+    if (pathKeys.has(key) && typeof value === "string" && value.trim()) {
+      candidates.push(value.trim());
+      continue;
+    }
+    if (pathArrayKeys.has(key) && Array.isArray(value)) {
+      for (const item of value) {
+        if (typeof item === "string" && item.trim()) {
+          candidates.push(item.trim());
+        }
+      }
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        collectPathCandidatesFromInput(item, candidates, depth + 1);
+      }
+      continue;
+    }
+    if (value && typeof value === "object") {
+      collectPathCandidatesFromInput(value, candidates, depth + 1);
+    }
+  }
+}
+
+function findOutsideTargetsFromInput(toolInput, absProjectRoot) {
+  const candidates = [];
+  collectPathCandidatesFromInput(toolInput, candidates, 0);
+
+  const uniqueCandidates = [...new Set(candidates)];
+  const outside = [];
+
+  for (const candidate of uniqueCandidates) {
+    const absTarget = realOrResolve(
+      resolvePathCandidate(candidate, absProjectRoot) || candidate,
+      absProjectRoot
+    );
+    if (!isInsideProject(absTarget, absProjectRoot)) {
+      outside.push(absTarget);
+    }
+  }
+
+  return [...new Set(outside)];
+}
+
 const projectRoot =
   process.env.CLAUDE_PROJECT_DIR ||
   process.env.PROJECT_DIR ||
   process.cwd();
 
-const settings = loadSettings(projectRoot);
+const absProjectRoot = realOrResolve(projectRoot, process.cwd());
+const settings = loadSettings(absProjectRoot);
 const input = readStdinJson();
 const toolName = input.tool_name || "";
 const toolInput = input.tool_input || {};
@@ -100,39 +361,23 @@ const toolInput = input.tool_input || {};
 if (toolName === "Bash") {
   const command = (toolInput.command || "").trim();
 
-  // If no settings, ask for all
-  if (settings.bash_allow_prefixes.length === 0) {
-    decide(
-      "ask",
-      [
-        "許可リストが未設定のため、Bashコマンドの確認が必要です。",
-        `command: ${command.substring(0, 100)}${command.length > 100 ? "..." : ""}`,
-        "実行を許可しますか？"
-      ].join("\n")
-    );
+  if (!matchesAnyPrefix(command, settings.bash_ask_outside_project_prefixes)) {
+    decide("allow", "Bash command not in outside-project ask list.");
     process.exit(0);
   }
 
-  for (const prefix of settings.bash_allow_prefixes) {
-    if (
-      command === prefix ||
-      command.startsWith(prefix + " ") ||
-      command.startsWith(prefix + "\t") ||
-      command.startsWith(prefix + ";") ||
-      command.startsWith(prefix + "&") ||
-      command.startsWith(prefix + "|")
-    ) {
-      decide("allow", `Bash command allowed: ${prefix}`);
-      process.exit(0);
-    }
+  const outsideTargets = findOutsideTargetsFromCommand(command, absProjectRoot);
+  if (outsideTargets.length === 0) {
+    decide("allow", "No outside-project paths detected for Bash command.");
+    process.exit(0);
   }
 
-  // Not in allow list
   decide(
     "ask",
     [
-      "許可リスト外のBashコマンドです。",
-      `command: ${command.substring(0, 100)}${command.length > 100 ? "..." : ""}`,
+      "プロジェクト外に干渉する可能性のあるBashコマンドです。",
+      `command: ${truncateForReason(command, 100)}`,
+      `targets: ${outsideTargets.join(", ")}`,
       "実行を許可しますか？"
     ].join("\n")
   );
@@ -141,41 +386,27 @@ if (toolName === "Bash") {
 
 // Handle MCP tools (mcp__*)
 if (toolName.startsWith("mcp__")) {
-  // If no settings, ask for all
-  if (settings.mcp_allow_list.length === 0) {
-    decide(
-      "ask",
-      [
-        "許可リストが未設定のため、MCPツールの確認が必要です。",
-        `tool: ${toolName}`,
-        "実行を許可しますか？"
-      ].join("\n")
-    );
+  const matchesList = settings.mcp_ask_outside_project.some(pattern =>
+    matchesMcpPattern(toolName, pattern)
+  );
+
+  if (!matchesList) {
+    decide("allow", "MCP tool not in outside-project ask list.");
     process.exit(0);
   }
 
-  // Check exact match or prefix match (for mcp__server__ patterns)
-  for (const pattern of settings.mcp_allow_list) {
-    if (toolName === pattern) {
-      decide("allow", `MCP tool allowed: ${toolName}`);
-      process.exit(0);
-    }
-    // Support wildcard pattern like "mcp__serena__*"
-    if (pattern.endsWith("*")) {
-      const prefix = pattern.slice(0, -1);
-      if (toolName.startsWith(prefix)) {
-        decide("allow", `MCP tool allowed by pattern: ${pattern}`);
-        process.exit(0);
-      }
-    }
+  const outsideTargets = findOutsideTargetsFromInput(toolInput, absProjectRoot);
+  if (outsideTargets.length === 0) {
+    decide("allow", "No outside-project paths detected for MCP tool.");
+    process.exit(0);
   }
 
-  // Not in allow list
   decide(
     "ask",
     [
-      "許可リスト外のMCPツールです。",
+      "プロジェクト外に干渉する可能性のあるMCPツールです。",
       `tool: ${toolName}`,
+      `targets: ${outsideTargets.join(", ")}`,
       "実行を許可しますか？"
     ].join("\n")
   );

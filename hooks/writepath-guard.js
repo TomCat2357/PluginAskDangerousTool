@@ -2,30 +2,20 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-
 /**
- * Read settings from .claude/ask-dangerous-tool.local.md
- * Priority: project scope > user scope > defaults
- * Format: YAML frontmatter with write_allow_outside_project paths
+ * Read settings from .permission.md
+ * Format: YAML frontmatter with write_ask_outside_project tools
  */
 function loadSettings(projectRoot) {
   const defaults = {
-    write_allow_outside_project: []
+    write_ask_outside_project: []
   };
 
-  // Try project scope first
-  const projectPath = path.join(projectRoot, ".claude", "ask-dangerous-tool.local.md");
-  if (fs.existsSync(projectPath)) {
-    return parseSettings(projectPath, defaults);
+  const settingsPath = path.join(projectRoot, ".permission.md");
+  if (fs.existsSync(settingsPath)) {
+    return parseSettings(settingsPath, defaults);
   }
 
-  // Fall back to user scope
-  const userPath = path.join(os.homedir(), ".claude", "ask-dangerous-tool.local.md");
-  if (fs.existsSync(userPath)) {
-    return parseSettings(userPath, defaults);
-  }
-
-  // No settings found, return defaults
   return defaults;
 }
 
@@ -38,11 +28,11 @@ function parseSettings(settingsPath, defaults) {
     const yaml = match[1];
     const settings = { ...defaults };
 
-    // Parse write_allow_outside_project as YAML array
-    const allowMatch = yaml.match(/write_allow_outside_project:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
-    if (allowMatch) {
-      const lines = allowMatch[1].split(/\r?\n/);
-      settings.write_allow_outside_project = lines
+    // Parse write_ask_outside_project as YAML array
+    const askMatch = yaml.match(/write_ask_outside_project:\s*\r?\n((?:\s*-\s*.+\r?\n?)*)/);
+    if (askMatch) {
+      const lines = askMatch[1].split(/\r?\n/);
+      settings.write_ask_outside_project = lines
         .map(line => line.match(/^\s*-\s*(.+)/))
         .filter(m => m)
         .map(m => m[1].trim().replace(/^["']|["']$/g, ""));
@@ -63,29 +53,24 @@ function readStdinJson() {
   }
 }
 
+function expandHome(p) {
+  if (p === "~") return os.homedir();
+  if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
+  return p;
+}
+
 function realOrResolve(p, baseDir) {
+  const expanded = expandHome(p);
   try {
-    return fs.realpathSync(p);
+    return fs.realpathSync(expanded);
   } catch {
-    return path.resolve(baseDir, p);
+    return path.resolve(baseDir, expanded);
   }
 }
 
 function isInsideProject(absTarget, absProjectRoot) {
   const rel = path.relative(absProjectRoot, absTarget);
   return !rel.startsWith("..") && !path.isAbsolute(rel);
-}
-
-function isInAllowList(absTarget, allowList, absProjectRoot) {
-  for (const pattern of allowList) {
-    const absPattern = realOrResolve(pattern, absProjectRoot);
-    // Check if target is inside allowed path or matches exactly
-    const rel = path.relative(absPattern, absTarget);
-    if (rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel))) {
-      return true;
-    }
-  }
-  return false;
 }
 
 function decide(decision, reason) {
@@ -117,6 +102,11 @@ const projectRoot =
 const absProjectRoot = realOrResolve(projectRoot, process.cwd());
 const settings = loadSettings(absProjectRoot);
 
+if (!settings.write_ask_outside_project.includes(toolName)) {
+  decide("allow", "Write/Edit tool not in outside-project ask list.");
+  process.exit(0);
+}
+
 // Extract paths from tool_input
 const pathCandidates = [];
 
@@ -140,10 +130,7 @@ if (Array.isArray(toolInput.edits)) {
 const uniquePaths = [...new Set(pathCandidates)];
 
 if (uniquePaths.length === 0) {
-  decide(
-    "ask",
-    `Could not determine target path(s) for ${toolName}. Continue?`
-  );
+  decide("allow", `No target paths detected for ${toolName}.`);
   process.exit(0);
 }
 
@@ -152,11 +139,6 @@ for (const p of uniquePaths) {
   const absTarget = realOrResolve(p, absProjectRoot);
 
   if (!isInsideProject(absTarget, absProjectRoot)) {
-    // Outside project - check if in allow list
-    if (isInAllowList(absTarget, settings.write_allow_outside_project, absProjectRoot)) {
-      continue; // Allowed
-    }
-
     decide(
       "ask",
       [
@@ -170,5 +152,5 @@ for (const p of uniquePaths) {
   }
 }
 
-decide("allow", "All target paths are within the project root or in allow list.");
+decide("allow", "All target paths are within the project root.");
 process.exit(0);

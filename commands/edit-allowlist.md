@@ -1,5 +1,5 @@
 ---
-description: "Edit the allow list for dangerous tool protection"
+description: "Edit the permission list for dangerous tool protection"
 argument-hint: "[add|remove|show|init] [bash|mcp|write] [pattern]"
 allowed-tools:
   - Read
@@ -8,46 +8,43 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# Edit Allow List Command
+# Edit Permission List Command
 
-Manage the allow list settings in `.claude/ask-dangerous-tool.local.md`.
+Manage the permission list settings in `.permission.md`.
 
-## Settings File Locations
+## Settings File Location
 
-Settings are loaded with the following priority:
-1. **Project scope**: `<projectroot>/.claude/ask-dangerous-tool.local.md` (highest priority)
-2. **User scope**: `~/.claude/ask-dangerous-tool.local.md` (fallback)
-3. **Defaults**: Empty lists (if no settings file exists)
+Settings are loaded from:
+1. **Project root**: `<projectroot>/.permission.md`
+
+If no settings file exists, all commands/tools are treated as allowed.
 
 ## Arguments
 
-- `show` - Display current allow list settings and which scope they're from
-- `add bash <prefix>` - Add a Bash command prefix to allow list
-- `add mcp <pattern>` - Add an MCP tool pattern to allow list (supports `*` wildcard)
-- `add write <path>` - Add a path to write-outside-project allow list
+- `show` - Display current permission list settings
+- `add bash <prefix>` - Add a Bash command prefix that requires confirmation when targeting outside the project
+- `add mcp <pattern>` - Add an MCP tool pattern that requires confirmation when targeting outside the project (supports `*` wildcard)
+- `add write <tool>` - Add a Write/Edit tool name that requires confirmation when targeting outside the project
 - `remove bash <prefix>` - Remove a Bash command prefix
 - `remove mcp <pattern>` - Remove an MCP tool pattern
-- `remove write <path>` - Remove a write-outside-project path
-- `init` - Initialize settings file from example template
+- `remove write <tool>` - Remove a Write/Edit tool name
+- `init` - Initialize `.permission.md` from example template
 
 ## Instructions
 
 ### For `show` command:
-1. Check which settings file exists (project or user scope)
+1. Check if `<projectroot>/.permission.md` exists
 2. Display the current lists in a readable format
-3. Indicate which scope the settings are loaded from
+3. Indicate when no settings file exists
 
 ### For `init` command:
-1. **IMPORTANT**: Use AskUserQuestion to ask the user which scope to initialize (user or project)
-2. Copy from `example.ask-dangerous-tool.local.md` in the plugin root to the selected location:
-   - User scope: `~/.claude/ask-dangerous-tool.local.md`
-   - Project scope: `<projectroot>/.claude/ask-dangerous-tool.local.md`
-3. Create the `.claude/` directory if it doesn't exist
+1. Copy from `example.permission.md` in the plugin root (e.g. `~/.claude/plugins/marketplaces/ask-dangerous-tool/example.permission.md`) to `<projectroot>/.permission.md`
+2. If the file already exists, do not overwrite it unless the user explicitly asks
 
 ### For `add` and `remove` commands:
-1. Check if a settings file already exists (project scope first, then user scope)
-2. If no settings file exists, **use AskUserQuestion** to ask which scope to create (user or project)
-3. Load the existing settings or create new one
+1. Check if `<projectroot>/.permission.md` exists
+2. If no settings file exists, initialize it from `example.permission.md` (plugin root)
+3. Load the existing settings
 4. Parse the YAML frontmatter to get current settings
 5. Add or remove the pattern from the appropriate list
 6. Write the updated settings back to the file
@@ -56,15 +53,15 @@ Settings are loaded with the following priority:
 
 ```markdown
 ---
-bash_allow_prefixes:
-  - pwd
-  - ls
-  - git status
-mcp_allow_list:
-  - mcp__serena__read_file
-  - mcp__serena__*
-write_allow_outside_project:
-  - /some/external/path
+bash_ask_outside_project_prefixes:
+  - rm
+  - mv
+mcp_ask_outside_project:
+  - mcp__filesystem__write_file
+  - mcp__filesystem__*
+write_ask_outside_project:
+  - Write
+  - Edit
 ---
 
 # Notes
@@ -75,7 +72,8 @@ Additional notes can go here.
 ## Example Usage
 
 - `/ask-dangerous-tool:edit-allowlist show` - Show current settings
-- `/ask-dangerous-tool:edit-allowlist add bash npm run` - Allow `npm run` commands
-- `/ask-dangerous-tool:edit-allowlist add mcp mcp__github__*` - Allow all GitHub MCP tools
-- `/ask-dangerous-tool:edit-allowlist remove bash rm` - Remove `rm` from allow list
-- `/ask-dangerous-tool:edit-allowlist init` - Initialize settings from template
+- `/ask-dangerous-tool:edit-allowlist add bash rm` - Ask when `rm` targets paths outside the project
+- `/ask-dangerous-tool:edit-allowlist add mcp mcp__filesystem__*` - Ask for matching MCP tools when they target paths outside the project
+- `/ask-dangerous-tool:edit-allowlist add write Write` - Ask when Write targets paths outside the project
+- `/ask-dangerous-tool:edit-allowlist remove bash rm` - Remove `rm` from the list
+- `/ask-dangerous-tool:edit-allowlist init` - Initialize `.permission.md` from template
