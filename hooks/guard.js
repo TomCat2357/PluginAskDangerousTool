@@ -110,16 +110,35 @@ function tokenizeCommand(command) {
   let quote = null;
   let escape = false;
 
-  for (const ch of command) {
+  for (let i = 0; i < command.length; i++) {
+    const ch = command[i];
+    const nextCh = i + 1 < command.length ? command[i + 1] : null;
+
     if (escape) {
       current += ch;
       escape = false;
       continue;
     }
+
     if (ch === "\\") {
-      escape = true;
+      if (quote === "'") {
+        // Inside single quotes, backslash is literal
+        current += ch;
+      } else if (quote === "\"") {
+        // Inside double quotes, backslash only escapes: " \ $ `
+        if (nextCh === "\"" || nextCh === "\\" || nextCh === "$" || nextCh === "`") {
+          escape = true;
+        } else {
+          // Keep the backslash as-is for Windows paths
+          current += ch;
+        }
+      } else {
+        // Outside quotes, backslash escapes the next character
+        escape = true;
+      }
       continue;
     }
+
     if (quote) {
       if (ch === quote) {
         quote = null;
@@ -128,10 +147,12 @@ function tokenizeCommand(command) {
       current += ch;
       continue;
     }
+
     if (ch === "'" || ch === "\"") {
       quote = ch;
       continue;
     }
+
     if (/\s/.test(ch)) {
       if (current) {
         tokens.push(current);
@@ -139,6 +160,7 @@ function tokenizeCommand(command) {
       }
       continue;
     }
+
     current += ch;
   }
 
