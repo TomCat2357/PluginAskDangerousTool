@@ -11,6 +11,19 @@ Claude Code plugin that prompts user confirmation before executing potentially d
 
 ## Installation
 
+### From Marketplace (Recommended)
+
+```bash
+/plugin marketplace add tomcat2357/pluginaskdangeroustool
+/plugin install ask-dangerous-tool@ask-dangerous-tool-plugin
+```
+
+**IMPORTANT: After installing the plugin, you MUST restart your Claude Code session for the hooks to take effect.**
+
+To restart:
+- Exit the current session (Ctrl+C or type `exit`)
+- Start a new Claude Code session
+
 ### As a Plugin
 
 ```bash
@@ -112,6 +125,52 @@ Each entry has the format: `<type> <pattern>`
 
 - MCP patterns support `*` suffix for prefix matching
 - Example: `mcp mcp__filesystem__*` matches all filesystem tools
+
+## Troubleshooting
+
+### Hooks Not Working
+
+If the plugin doesn't ask for confirmation when it should:
+
+1. **Check if the plugin is installed and enabled:**
+   ```bash
+   /plugin
+   ```
+   You should see `ask-dangerous-tool@ask-dangerous-tool-plugin` in the list.
+
+2. **Verify the plugin is enabled in settings:**
+   Check `~/.claude/settings.json` - it should contain:
+   ```json
+   {
+     "enabledPlugins": {
+       "ask-dangerous-tool@ask-dangerous-tool-plugin": true
+     }
+   }
+   ```
+
+3. **RESTART YOUR SESSION:**
+   Hooks are registered only at session startup. If you just installed the plugin, you MUST restart Claude Code:
+   ```bash
+   exit  # Exit current session
+   claude  # Start new session
+   ```
+
+4. **Verify hooks are loaded:**
+   After restarting, the hooks should be active. Check the debug logs if needed:
+   ```bash
+   grep -i "hook\|guard" ~/.claude/debug/*.txt | tail -20
+   ```
+
+### Manual Testing
+
+You can test if `guard.js` works correctly:
+
+```bash
+echo '{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}' | \
+  node ~/.claude/plugins/cache/ask-dangerous-tool-plugin/ask-dangerous-tool/*/hooks/guard.js
+```
+
+This should return an "ask" decision if the plugin is properly installed.
 
 ## License
 
